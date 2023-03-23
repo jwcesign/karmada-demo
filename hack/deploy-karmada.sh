@@ -17,6 +17,7 @@ HOST_CLUSTER_NAME=${HOST_CLUSTER_NAME:-"karmada-host"}
 ROOT_CA_FILE=${CERT_DIR}/ca.crt
 ROOT_CA_KEY=${CERT_DIR}/ca.key
 CFSSL_VERSION="v1.6.2"
+KARMADA_K8S_VERSION=${KARMADA_K8S_VERSION:-"v1.25.2"}
 LOAD_BALANCER=${LOAD_BALANCER:-false} # whether create a 'LoadBalancer' type service for karmada apiserver
 source "${REPO_ROOT}"/hack/util.sh
 
@@ -188,6 +189,7 @@ TEMP_PATH_APISERVER=$(mktemp -d)
 trap '{ rm -rf ${TEMP_PATH_APISERVER}; }' EXIT
 cp "${REPO_ROOT}"/artifacts/deploy/karmada-apiserver.yaml "${TEMP_PATH_APISERVER}"/karmada-apiserver.yaml
 sed -i'' -e "s/{{service_type}}/${KARMADA_APISERVER_SERVICE_TYPE}/g" "${TEMP_PATH_APISERVER}"/karmada-apiserver.yaml
+sed -i'' -e "s/{{karmada_k8s_version}}/${KARMADA_K8S_VERSION}/g" "${TEMP_PATH_APISERVER}"/karmada-apiserver.yaml
 echo -e "\nApply dynamic rendered apiserver service in ${TEMP_PATH_APISERVER}/karmada-apiserver.yaml."
 kubectl --context="${HOST_CLUSTER_NAME}" apply -f "${TEMP_PATH_APISERVER}"/karmada-apiserver.yaml
 
@@ -224,7 +226,12 @@ fi
 util::append_client_kubeconfig "${HOST_CLUSTER_KUBECONFIG}" "${CERT_DIR}/karmada.crt" "${CERT_DIR}/karmada.key" "${KARMADA_APISERVER_IP}" "${KARMADA_APISERVER_SECURE_PORT}" karmada-apiserver
 
 # deploy kube controller manager
-kubectl --context="${HOST_CLUSTER_NAME}" apply -f "${REPO_ROOT}/artifacts/deploy/kube-controller-manager.yaml"
+TEMP_PATH_KUBE_CONTROLLER_MANAGER=$(mktemp -d)
+trap '{ rm -rf ${TEMP_PATH_KUBE_CONTROLLER_MANAGER}; }' EXIT
+cp "${REPO_ROOT}"/artifacts/deploy/kube-controller-manager.yaml "${TEMP_PATH_KUBE_CONTROLLER_MANAGER}"/kube-controller-manager.yaml
+sed -i'' -e "s/{{karmada_k8s_version}}/${KARMADA_K8S_VERSION}/g" "${TEMP_PATH_KUBE_CONTROLLER_MANAGER}"/kube-controller-manager.yaml
+kubectl --context="${HOST_CLUSTER_NAME}" apply -f "${TEMP_PATH_KUBE_CONTROLLER_MANAGER}"/kube-controller-manager.yaml
+
 # deploy aggregated-apiserver on host cluster
 kubectl --context="${HOST_CLUSTER_NAME}" apply -f "${REPO_ROOT}/artifacts/deploy/karmada-aggregated-apiserver.yaml"
 util::wait_pod_ready "${HOST_CLUSTER_NAME}" "${KARMADA_AGGREGATION_APISERVER_LABEL}" "${KARMADA_SYSTEM_NAMESPACE}"
